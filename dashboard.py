@@ -18,18 +18,18 @@ c.execute('''CREATE TABLE IF NOT EXISTS responses
              (id INTEGER PRIMARY KEY, sender TEXT, subject TEXT, seen INTEGER)''')
 conn.commit()
 
-# Function to create a simple dashboard UI
+# Function to create a simple dashboard UI with pagination
 def create_dashboard():
     root = tk.Tk()
     root.title("Email Response Dashboard")
     
     # Adjusted window size for better visibility
-    root.geometry("600x600")
+    root.geometry("800x600")
     
     # Label for the dashboard
     tk.Label(root, text="Email Responses", font=("Helvetica", 16, "bold")).pack(pady=10)
 
-    # Frame to hold responses with checkboxes, adding a scrollbar for better usability
+    # Frame to hold responses with checkboxes
     response_frame = tk.Frame(root)
     response_frame.pack(fill="both", expand=True, pady=10)
 
@@ -49,25 +49,56 @@ def create_dashboard():
     response_canvas.pack(side="left", fill="both", expand=True)
     scrollbar.pack(side="right", fill="y")
 
+    # Pagination buttons and label to display the current page
+    button_frame = tk.Frame(root)
+    button_frame.pack(pady=10)
+
+    prev_button = tk.Button(button_frame, text="Previous", command=lambda: update_responses(response_list, -1))
+    prev_button.pack(side="left", padx=10)
+
+    next_button = tk.Button(button_frame, text="Next", command=lambda: update_responses(response_list, 1))
+    next_button.pack(side="left", padx=10)
+
+    global page_label
+    page_label = tk.Label(button_frame, text="Page 1")
+    page_label.pack(side="left", padx=10)
+
     # Button to check for new email responses
-    tk.Button(root, text="Check for Responses", command=lambda: update_responses(response_list)).pack(pady=10)
+    tk.Button(root, text="Check for Responses", command=lambda: update_responses(response_list, 0)).pack(pady=10)
 
     # Close button
     tk.Button(root, text="Close", command=root.quit).pack(pady=20)
 
-    # Load previous responses from the database
-    load_responses(response_list)
+    # Load first page of responses
+    load_responses(response_list, 0)
 
     root.mainloop()
 
-# Function to load responses from the database
-def load_responses(response_list):
+# Global variables to manage pagination
+current_page = 0
+responses_per_page = 20
+
+# Function to load responses from the database with pagination
+def load_responses(response_list, page_offset=0):
+    global current_page
+    current_page += page_offset
+
     for widget in response_list.winfo_children():
         widget.destroy()
 
-    # Fetch all responses from the database
-    c.execute("SELECT id, sender, subject, seen FROM responses")
+    # Fetch responses for the current page from the database
+    offset = current_page * responses_per_page
+    c.execute("SELECT id, sender, subject, seen FROM responses LIMIT ? OFFSET ?", (responses_per_page, offset))
     rows = c.fetchall()
+
+    if not rows and current_page > 0:
+        # If no rows and it's not the first page, go back one page
+        current_page -= 1
+        load_responses(response_list, 0)
+        return
+
+    # Update the page label
+    page_label.config(text=f"Page {current_page + 1}")
 
     for row in rows:
         response_id, sender, subject, seen = row
@@ -135,9 +166,9 @@ def check_email_responses():
     return responses
 
 # Function to update responses in the list
-def update_responses(response_list):
+def update_responses(response_list, page_offset):
     new_responses = check_email_responses()
-    load_responses(response_list)
+    load_responses(response_list, page_offset)
 
 if __name__ == "__main__":
     create_dashboard()
